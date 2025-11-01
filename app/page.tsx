@@ -14,7 +14,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     // Hardcoded demo credentials
-    const DEMO_EMAIL = "demo@margos.in"
+    const DEMO_EMAIL = "demo@margros.in"
     const DEMO_PASSWORD = "demo@123"
     
     if (loading) return
