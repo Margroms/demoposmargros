@@ -3,85 +3,42 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createClient } from "@/lib/supabase/client"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
-  const supabase = useMemo(() => createClient(), [])
 
   const handleLogin = async () => {
-    // Hardcoded demo credentials
-    const DEMO_EMAIL = "demo@margros.in"
-    const DEMO_PASSWORD = "demo@123"
-    
     if (loading) return
     setLoading(true)
-    
-    // Validate credentials
-    if (email !== DEMO_EMAIL || password !== DEMO_PASSWORD) {
+
+    try {
+      // Call login API
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setLoading(false)
+        alert(data.error || "Invalid email or password. Please use the demo credentials.")
+        return
+      }
+
+      // Login successful - redirect to dashboard
+      window.location.href = "/dashboard/admin"
+    } catch (error) {
       setLoading(false)
-      alert("Invalid email or password. Please use the demo credentials.")
-      return
+      alert("An error occurred during login. Please try again.")
+      console.error("[login] error:", error)
     }
-    
-    // Valid credentials - redirect to dashboard
-    window.location.href = "/dashboard/admin"
-    
-    /*
-    if (loading) return
-    setLoading(true)
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    console.log("[login] signIn", { error, user: data?.user?.id, email })
-    if (error) {
-      setLoading(false)
-      return alert(error.message)
-    }
-
-    // Wait for session cookie to be written (prevents bounce by middleware)
-    let tries = 0
-    let session = null
-    while (tries < 10) {
-      const res = await supabase.auth.getSession()
-      session = res.data.session
-      if (session) break
-      await new Promise((r) => setTimeout(r, 100))
-      tries++
-    }
-    console.log("[login] session settled", { hasSession: !!session, tries })
-
-    // Resolve role on the client and go straight to the section to avoid flicker
-    let role = "waiter"
-    const { data: userRow, error: fetchErr } = await supabase
-      .from("users")
-      .select("role")
-      .eq("email", email)
-      .single()
-    console.log("[login] role fetch", { fetchErr, userRow })
-    if (!userRow) {
-      const name = session?.user?.user_metadata?.full_name || email.split("@")[0]
-      const { data: provisioned, error: provisionErr } = await supabase
-        .from("users")
-        .upsert([{ id: session?.user?.id, email, name, role }], { onConflict: "email" })
-        .select("role")
-        .single()
-      console.log("[login] role provision", { provisionErr, provisioned })
-      role = provisioned?.role || role
-    } else {
-      role = userRow.role || role
-    }
-
-    const roleHome: Record<string, string> = {
-      admin: "/dashboard/admin",
-      waiter: "/dashboard/waiter",
-      kitchen: "/dashboard/kitchen",
-      billing: "/dashboard/billing",
-      inventory: "/dashboard/inventory",
-    }
-    window.location.href = roleHome[role] || "/dashboard/waiter"
-    */
   }
 
   return (
@@ -90,7 +47,7 @@ export default function LoginPage() {
         <Card className="border-2">
           <CardHeader className="space-y-2 text-center pb-4">
             <CardTitle className="text-2xl sm:text-3xl font-bold">Restaurant POS</CardTitle>
-            <CardDescription className="text-sm sm:text-base">AUTH DISABLED - Click to access dashboard</CardDescription>
+            <CardDescription className="text-sm sm:text-base">Sign in to access the admin dashboard</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pb-4">
             <div className="space-y-2">
@@ -118,10 +75,10 @@ export default function LoginPage() {
           </CardContent>
           <CardFooter className="flex flex-col space-y-4 pt-2">
             <Button className="w-full h-11 text-base" onClick={handleLogin} disabled={loading}>
-              {loading ? "Accessing..." : "Access Dashboard"}
+              {loading ? "Signing in..." : "Sign In"}
             </Button>
             <div className="text-center text-sm text-muted-foreground">
-              Authentication is currently disabled
+              Demo: demo@margros.in / demo@123
             </div>
           </CardFooter>
         </Card>

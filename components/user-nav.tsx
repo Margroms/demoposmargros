@@ -12,47 +12,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { LogOut, Settings, User } from "lucide-react"
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 
 export function UserNav() {
   const router = useRouter()
-  const supabase = createClient()
   
-  // AUTH SYSTEM COMMENTED OUT - STATIC USER INFO
-  const [email, setEmail] = useState<string>("admin@restaurant.com")
-  const [name, setName] = useState<string>("Admin User")
-  const [role, setRole] = useState<string>("admin")
-
-  useEffect(() => {
-    // AUTH SYSTEM COMMENTED OUT - NO SESSION FETCHING
-    /*
-    let mounted = true
-    ;(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!mounted) return
-      const userEmail = session?.user?.email || ""
-      setEmail(userEmail)
-      setName(session?.user?.user_metadata?.full_name || userEmail?.split("@")[0] || "User")
-      if (userEmail) {
-        const { data } = await supabase.from("users").select("role").eq("email", userEmail).single()
-        if (data?.role) setRole(data.role)
-      }
-    })()
-    return () => {
-      mounted = false
-    }
-    */
-  }, [])
+  // Static user info for admin
+  const [email] = useState<string>("admin@restaurant.com")
+  const [name] = useState<string>("Admin User")
+  const [role] = useState<string>("admin")
 
   const handleLogout = async () => {
-    // AUTH SYSTEM COMMENTED OUT - SIMPLE REDIRECT
-    router.replace("/")
-    /*
-    await supabase.auth.signOut()
-    router.replace("/")
-    */
+    try {
+      // Call logout API to clear session cookie
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      })
+      
+      // Redirect to login page
+      router.replace("/")
+    } catch (error) {
+      console.error("[logout] error:", error)
+      // Still redirect even if API call fails
+      router.replace("/")
+    }
   }
 
   return (
