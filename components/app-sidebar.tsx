@@ -11,20 +11,11 @@ import {
   Package,
   Settings,
   LogOut,
-  Moon,
-  Sun,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useTheme } from "next-themes"
 
 interface AppSidebarProps {
   role: string
@@ -35,7 +26,6 @@ interface AppSidebarProps {
 export function AppSidebar({ role, open: openProp, setOpen: setOpenProp }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
-  const { theme, setTheme } = useTheme()
   
   // Use internal state if props not provided
   const [internalOpen, setInternalOpen] = useState(false)
@@ -95,29 +85,6 @@ export function AppSidebar({ role, open: openProp, setOpen: setOpenProp }: AppSi
 
         {/* Footer */}
         <div className="flex flex-col gap-2">
-          {/* Theme Toggle */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center justify-start gap-2 group/sidebar py-2 w-full">
-                {theme === "dark" ? (
-                  <Moon className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-                ) : (
-                  <Sun className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />
-                )}
-                {open && (
-                  <span className="text-neutral-700 dark:text-neutral-200 text-sm group-hover/sidebar:translate-x-1 transition duration-150 whitespace-pre inline-block">
-                    Theme
-                  </span>
-                )}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" side="right">
-              <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
           {/* Settings */}
           <Link href="#" className="flex items-center justify-start gap-2 group/sidebar py-2">
             <Settings className="h-5 w-5 shrink-0 text-neutral-700 dark:text-neutral-200" />

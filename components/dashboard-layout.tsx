@@ -9,6 +9,7 @@ import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { IconMenu2 } from "@tabler/icons-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -81,6 +82,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span className="hidden sm:inline">{currentRole.title}</span>
                 <span className="sm:hidden">{currentRole.title.split(' ')[0]}</span>
               </Link>
+            </div>
+            <div className="flex items-center">
+              <ThemeToggle />
             </div>
           </div>
         </header>
