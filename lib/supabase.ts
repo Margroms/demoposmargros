@@ -38,6 +38,7 @@ export interface Database {
           quantity: number
           price: number
           notes?: string
+          status?: "pending" | "preparing" | "ready"
           created_at: string
         }
       }

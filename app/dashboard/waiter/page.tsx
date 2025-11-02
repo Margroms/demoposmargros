@@ -89,8 +89,114 @@ export default function WaiterDashboard() {
 
   const fetchData = async () => {
     setLoading(true)
-    await Promise.all([fetchTables(), fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
+    await Promise.all([seedTablesIfNeeded(), fetchTables(), fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
     setLoading(false)
+  }
+
+  // Seed tables if they don't exist
+  const seedTablesIfNeeded = async () => {
+    try {
+      // Check if tables already exist
+      const { data: existingTables, error: fetchError } = await supabase
+        .from("tables")
+        .select("id, number, zone")
+        .order("number")
+
+      if (fetchError) {
+        console.error("Error fetching tables for seeding:", fetchError)
+        return
+      }
+
+      // Get existing table numbers (since number has unique constraint globally)
+      const existingNumbers = new Set(existingTables?.map(t => t.number) || [])
+      
+      // Get existing tables by zone to check if we need to create any
+      const existingByZone = {
+        "AC": existingTables?.filter(t => t.zone === "AC") || [],
+        "Non-AC": existingTables?.filter(t => t.zone === "Non-AC") || [],
+        "Outdoor": existingTables?.filter(t => t.zone === "Outdoor") || [],
+      }
+
+      // Define tables to create: 4 in AC, 3 in Non-AC, 3 in Outdoor
+      const tablesToCreate = [
+        // AC Section - 4 tables
+        { zone: "AC", seats: 2, capacity: 2, status: "free" as const },
+        { zone: "AC", seats: 4, capacity: 4, status: "free" as const },
+        { zone: "AC", seats: 6, capacity: 6, status: "free" as const },
+        { zone: "AC", seats: 2, capacity: 2, status: "free" as const },
+        // Non-AC Section - 3 tables
+        { zone: "Non-AC", seats: 4, capacity: 4, status: "free" as const },
+        { zone: "Non-AC", seats: 6, capacity: 6, status: "free" as const },
+        { zone: "Non-AC", seats: 2, capacity: 2, status: "free" as const },
+        // Outdoor Section - 3 tables
+        { zone: "Outdoor", seats: 4, capacity: 4, status: "free" as const },
+        { zone: "Outdoor", seats: 6, capacity: 6, status: "free" as const },
+        { zone: "Outdoor", seats: 2, capacity: 2, status: "free" as const },
+      ]
+
+      // Find the next available number
+      const getNextAvailableNumber = () => {
+        let num = 1
+        while (existingNumbers.has(num)) {
+          num++
+        }
+        existingNumbers.add(num)
+        return num
+      }
+
+      // Only create tables if zones don't have enough tables
+      const tablesToInsert: Array<{ number: number; zone: string; seats: number; capacity: number; status: "free" }> = []
+      
+      // AC Section - need 4 tables
+      if (existingByZone["AC"].length < 4) {
+        const needed = 4 - existingByZone["AC"].length
+        for (let i = 0; i < needed && i < 4; i++) {
+          const table = tablesToCreate[i]
+          tablesToInsert.push({
+            number: getNextAvailableNumber(),
+            ...table
+          })
+        }
+      }
+
+      // Non-AC Section - need 3 tables
+      if (existingByZone["Non-AC"].length < 3) {
+        const needed = 3 - existingByZone["Non-AC"].length
+        for (let i = 0; i < needed && i < 3; i++) {
+          const table = tablesToCreate[4 + i]
+          tablesToInsert.push({
+            number: getNextAvailableNumber(),
+            ...table
+          })
+        }
+      }
+
+      // Outdoor Section - need 3 tables
+      if (existingByZone["Outdoor"].length < 3) {
+        const needed = 3 - existingByZone["Outdoor"].length
+        for (let i = 0; i < needed && i < 3; i++) {
+          const table = tablesToCreate[7 + i]
+          tablesToInsert.push({
+            number: getNextAvailableNumber(),
+            ...table
+          })
+        }
+      }
+
+      if (tablesToInsert.length > 0) {
+        const { error: insertError } = await supabase.from("tables").insert(tablesToInsert)
+
+        if (insertError) {
+          console.error("Error seeding tables:", insertError)
+          // Don't show toast for seeding errors to avoid annoying users
+        } else {
+          console.log(`Seeded ${tablesToInsert.length} new tables`)
+        }
+      }
+    } catch (error) {
+      console.error("Error in seedTablesIfNeeded:", error)
+      // Don't show toast for seeding errors to avoid annoying users
+    }
   }
 
   const fetchTables = async () => {
@@ -232,7 +338,6 @@ export default function WaiterDashboard() {
           quantity: 1,
           price: item.price,
           notes: "",
-          status: "pending",
         },
       ])
     }
@@ -298,8 +403,7 @@ export default function WaiterDashboard() {
         menu_item_id: item.menu_item_id,
         quantity: item.quantity,
         price: item.price,
-        notes: item.notes,
-        status: "pending" as const,
+        notes: item.notes || "",
       }))
 
       const { error: itemsError } = await supabase.from("order_items").insert(orderItemsToInsert)
@@ -530,33 +634,50 @@ export default function WaiterDashboard() {
                 .filter((table) => table.zone === zone)
                 .map((table) => {
                   const tableOrders = getTableOrders(table.id)
+                  const isSelected = selectedTable?.id === table.id
+                  const hasOrders = tableOrders.length > 0
                   return (
                     <Card
                       key={table.id}
                       className={cn(
-                        "cursor-pointer transition-all hover:shadow-lg border-2 min-h-[120px] sm:min-h-[130px] active:scale-95",
-                        selectedTable?.id === table.id && "ring-2 ring-primary border-primary shadow-md",
-                        table.status === "occupied" ? "bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800" : "",
-                        table.status === "bill-pending" ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" : "",
-                        table.status === "free" ? "bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800" : "",
+                        "cursor-pointer transition-all hover:shadow-lg border-2 min-h-[120px] sm:min-h-[130px] active:scale-95 rounded-lg",
+                        isSelected 
+                          ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/30 dark:border-blue-500 shadow-md" 
+                          : hasOrders || table.status === "free"
+                          ? "border-green-500 bg-green-50/50 dark:bg-green-950/30 dark:border-green-500"
+                          : "border-amber-500 bg-amber-50/50 dark:bg-amber-950/30 dark:border-amber-500",
                       )}
                       onClick={() => handleTableSelect(table)}
                     >
                       <CardContent className="p-3 sm:p-4 h-full">
                         <div className="text-center space-y-2 h-full flex flex-col justify-center">
                           <div className="flex items-center justify-center">
-                            <Badge className={cn("text-white text-sm font-bold px-3 py-1.5", getStatusColor(table.status))}>
+                            <Badge 
+                              className={cn(
+                                "text-white text-sm font-bold rounded-full h-10 w-10 flex items-center justify-center",
+                                isSelected ? "bg-blue-500" : hasOrders || table.status === "free" ? "bg-green-500" : "bg-amber-500"
+                              )}
+                            >
                               T{table.number}
                             </Badge>
                           </div>
-                          <div className="text-sm text-muted-foreground font-medium">
-                            {table.seats} seats
+                          <div className="text-sm text-foreground font-medium">
+                            {table.seats || table.capacity || 0} seats
                           </div>
                           <div className="text-sm">
-                            {tableOrders.length > 0 ? (
-                              <p className="font-semibold text-primary">{tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}</p>
+                            {hasOrders ? (
+                              <p className={cn(
+                                "font-semibold",
+                                isSelected ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"
+                              )}>
+                                {tableOrders.length} order{tableOrders.length !== 1 ? 's' : ''}
+                              </p>
                             ) : (
-                              <p className="text-muted-foreground">Available</p>
+                              <p className={cn(
+                                isSelected ? "text-blue-600 dark:text-blue-400" : "text-green-600 dark:text-green-400"
+                              )}>
+                                Available
+                              </p>
                             )}
                           </div>
                         </div>
