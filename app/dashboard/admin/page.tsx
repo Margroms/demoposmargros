@@ -24,6 +24,8 @@ import {
 } from "recharts"
 import { getAdminAssistantInsights, getStrategicBusinessPlan, getOperationalEfficiencyAnalysis, getCustomerInsightsAnalysis, getCompetitiveAnalysisReport, getBusinessIntelligenceDashboard } from "@/models/AdminAssistant"
 import MarkdownRenderer from "@/components/markdown-renderer"
+import { BenchmarkComparisonDashboard } from "@/components/benchmark-comparison-dashboard"
+import { getRestaurantSettings } from "@/lib/restaurant-settings"
 
 export default function AdminDashboard() {
   // State
@@ -48,6 +50,7 @@ export default function AdminDashboard() {
   const [aiInsights, setAiInsights] = useState<string | null>(null)
   const [showAiInsights, setShowAiInsights] = useState(false)
   const [loadingInsights, setLoadingInsights] = useState(false)
+  const [restaurantSettings, setRestaurantSettings] = useState<any>(null)
 
   // Fetch data on component mount
   useEffect(() => {
@@ -61,9 +64,15 @@ export default function AdminDashboard() {
       fetchPayments(), 
       fetchOrderItems(), 
       fetchMenuItems(), 
-      fetchMenuCategories()
+      fetchMenuCategories(),
+      fetchRestaurantSettings()
     ])
     setLoading(false)
+  }
+
+  const fetchRestaurantSettings = async () => {
+    const settings = await getRestaurantSettings()
+    setRestaurantSettings(settings)
   }
 
   const fetchOrders = async () => {
@@ -601,6 +610,25 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Benchmark Comparison Dashboard */}
+        {restaurantSettings && restaurantSettings.restaurant_type && (
+          <BenchmarkComparisonDashboard
+            restaurantType={restaurantSettings.restaurant_type}
+            actualMetrics={{
+              // Calculate actual metrics from orders/payments
+              // These are simplified - in production you'd calculate from actual cost data
+              food_cost_percent: undefined, // Would need inventory/cost tracking
+              staff_cost_percent: undefined, // Would need staff cost data
+              marketing_percent: undefined, // Would need marketing spend data
+              rent_percent: undefined, // Would need rent data
+              delivery_ratio_percent: stats.totalRevenue > 0 
+                ? (payments.filter(p => p.payment_method === 'upi' || p.payment_method === 'qr').reduce((sum, p) => sum + p.amount, 0) / stats.totalRevenue) * 100
+                : undefined,
+              profit_margin_percent: undefined // Would need cost data
+            }}
+          />
+        )}
 
         <Tabs defaultValue="daily" className="w-full">
           <div className="flex justify-between items-center">

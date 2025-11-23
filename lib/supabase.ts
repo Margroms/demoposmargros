@@ -111,6 +111,17 @@ export interface Database {
           created_at: string
         }
       }
+      restaurant_settings: {
+        Row: {
+          id: number
+          restaurant_type: "cafe" | "qsr" | "fine_dine" | "pub_restobar" | "cloud_kitchen" | "bakery" | "food_truck"
+          city_tier?: "metro" | "tier_1" | "tier_2" | "tier_3"
+          region?: "south" | "north" | "west" | "east"
+          restaurant_name?: string
+          created_at: string
+          updated_at: string
+        }
+      }
     }
   }
 }
@@ -124,6 +135,7 @@ export type InventoryItem = Table<'inventory_items'>;
 export type InventoryCategory = Table<'inventory_categories'>;
 export type TableRow = Table<'tables'>;
 export type Payment = Table<'payments'>;
+export type RestaurantSettings = Table<'restaurant_settings'>;
 
 // Extended types with relations for specific use cases
 export type OrderItemWithMenuItem = OrderItem & {

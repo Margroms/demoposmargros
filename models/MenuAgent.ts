@@ -1,5 +1,7 @@
 
 import { getGroqCompletion } from "./AIAgent";
+import { getRestaurantSettings } from "@/lib/restaurant-settings";
+import { getTypeAwareMenuAnalysis } from "./BenchmarkAgent";
 
 interface MenuItem {
   id: number;
@@ -96,6 +98,45 @@ export async function getComprehensiveMenuAnalysis(data: MenuAnalysisData) {
   const underperformers = Object.entries(salesPerformance)
     .sort(([,a], [,b]) => a.quantity - b.quantity)
     .slice(0, 5);
+
+  // Try to get restaurant settings for type-aware analysis
+  const restaurantSettings = await getRestaurantSettings();
+  
+  // If restaurant is configured, use type-aware menu analysis
+  if (restaurantSettings && restaurantSettings.restaurant_type) {
+    const topItems = topSellers.map(([name, stats]) => ({
+      name,
+      quantity: stats.quantity,
+      revenue: stats.revenue
+    }));
+
+    const categories = categoryBreakdown.map(cat => ({
+      name: cat.name,
+      revenue: data.orderItems ? 
+        data.orderItems
+          .filter(item => {
+            const menuItem = data.menuItems.find(mi => mi.id === item.menu_item_id);
+            return menuItem && menuItem.category_id === data.menuCategories.find(c => c.name === cat.name)?.id;
+          })
+          .reduce((sum, item) => sum + (item.price * item.quantity), 0) : 0,
+      items: cat.items
+    }));
+
+    try {
+      const typeAwareAnalysis = await getTypeAwareMenuAnalysis(
+        restaurantSettings.restaurant_type,
+        {
+          topItems,
+          categories
+        }
+      );
+      
+      return typeAwareAnalysis;
+    } catch (error) {
+      console.error("Error getting type-aware menu analysis, falling back to standard:", error);
+      // Fall through to standard analysis
+    }
+  }
 
   const prompt = `
 **MENU MANAGEMENT AGENT - COMPREHENSIVE CULINARY ANALYSIS**

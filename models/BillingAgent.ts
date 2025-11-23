@@ -1,5 +1,7 @@
 
 import { getGroqCompletion } from "./AIAgent";
+import { getRestaurantSettings } from "@/lib/restaurant-settings";
+import { getBenchmarkAwareInsights } from "./BenchmarkAgent";
 
 interface ComprehensiveInsightData {
   completedPayments: any[];
@@ -36,6 +38,40 @@ export async function getBillingInsights(data: ComprehensiveInsightData) {
     topSellingItems: data.topSellingItems || [],
     hourlyTrends: data.hourlyTrends || []
   };
+
+  // Try to get restaurant settings for benchmark-aware insights
+  const restaurantSettings = await getRestaurantSettings();
+  
+  // If restaurant is configured, use benchmark-aware insights
+  if (restaurantSettings && restaurantSettings.restaurant_type) {
+    // Calculate actual metrics from data
+    // Note: These are simplified calculations - in production, you'd want more accurate metrics
+    const deliveryRatio = safeData.totalRevenue > 0 
+      ? (safeData.paymentMethodBreakdown['upi'] || 0) / safeData.totalRevenue * 100 
+      : undefined;
+    
+    const actualMetrics = {
+      delivery_ratio_percent: deliveryRatio,
+      profit_margin_percent: undefined, // Would need cost data to calculate
+    };
+
+    try {
+      const benchmarkInsights = await getBenchmarkAwareInsights({
+        restaurantType: restaurantSettings.restaurant_type,
+        cityTier: restaurantSettings.city_tier || undefined,
+        season: getCurrentSeason(),
+        actualMetrics,
+        timeRange: safeData.timeRange,
+        additionalContext: `Total Revenue: ${formatCurrency(safeData.totalRevenue)}, Total Orders: ${safeData.totalOrders}, Avg Order Value: ${formatCurrency(safeData.averageOrderValue)}`
+      });
+      
+      // Combine with standard insights
+      return benchmarkInsights;
+    } catch (error) {
+      console.error("Error getting benchmark-aware insights, falling back to standard:", error);
+      // Fall through to standard insights
+    }
+  }
 
   const prompt = `
 You are analyzing restaurant sales data for a comprehensive business report. All monetary values are in Indian Rupees (₹). Provide insights in a well-structured format with clear headings and actionable recommendations.
@@ -120,6 +156,16 @@ Please format your response with clear sections, use bullet points for key insig
 `;
 
   return await getGroqCompletion(prompt);
+}
+
+function getCurrentSeason(): "summer" | "monsoon" | "winter" {
+  const month = new Date().getMonth();
+  // Summer: March-May (2-4)
+  // Monsoon: June-September (5-8)
+  // Winter: October-February (9-11, 0-1)
+  if (month >= 2 && month <= 4) return "summer";
+  if (month >= 5 && month <= 8) return "monsoon";
+  return "winter";
 }
 
 export async function getQuickInsights(recentPayments: any[]) {

@@ -20,7 +20,7 @@ export function MainNav({ className, role }: MainNavProps) {
     admin: [
       { href: "/dashboard/admin", label: "Overview", icon: Home },
       { href: "/dashboard/admin/menu", label: "Menu", icon: Package },
- 
+      { href: "/dashboard/admin/settings", label: "Settings", icon: Settings },
     ],
     kitchen: [
       { href: "/dashboard/kitchen", label: "Orders Queue", icon: ChefHat },
