@@ -80,10 +80,18 @@ export default function WaiterDashboard() {
       })
       .subscribe()
 
+    const menuItemsSubscription = supabase
+      .channel("waiter-menu-items")
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => {
+        fetchMenuItems()
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(tablesSubscription)
       supabase.removeChannel(ordersSubscription)
       supabase.removeChannel(orderItemsSubscription)
+      supabase.removeChannel(menuItemsSubscription)
     }
   }, [])
 
@@ -275,7 +283,6 @@ export default function WaiterDashboard() {
         *,
         menu_categories (*)
       `)
-      .eq("is_available", true)
       .order("name")
 
     if (error) {
@@ -322,6 +329,16 @@ export default function WaiterDashboard() {
 
   // Add item to new order
   const addItemToOrder = (item: MenuItem) => {
+    // Prevent adding unavailable items
+    if (!item.is_available) {
+      toast({
+        title: "Item Unavailable",
+        description: `${item.name} is currently unavailable and cannot be added to the order`,
+        variant: "destructive",
+      })
+      return
+    }
+
     const existingItem = newOrder.find((orderItem) => orderItem.menu_item_id === item.id)
 
     if (existingItem) {
@@ -858,16 +875,34 @@ export default function WaiterDashboard() {
                               <Button
                                 key={item.id}
                                 variant="outline"
-                                className="justify-between h-auto py-4 px-4 text-left border-2 hover:border-primary hover:bg-primary/5 active:scale-95 transition-all"
+                                disabled={!item.is_available}
+                                className={cn(
+                                  "justify-between h-auto py-4 px-4 text-left border-2 transition-all",
+                                  item.is_available
+                                    ? "hover:border-primary hover:bg-primary/5 active:scale-95"
+                                    : "opacity-50 cursor-not-allowed border-dashed"
+                                )}
                                 onClick={() => addItemToOrder(item)}
                               >
-                                <div className="flex flex-col items-start gap-1.5">
-                                  <span className="text-base font-semibold text-foreground">{item.name}</span>
+                                <div className="flex flex-col items-start gap-1.5 flex-1">
+                                  <div className="flex items-center gap-2 w-full">
+                                    <span className="text-base font-semibold text-foreground">{item.name}</span>
+                                    {!item.is_available && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Unavailable
+                                      </Badge>
+                                    )}
+                                  </div>
                                   {item.description && (
                                     <span className="text-sm text-muted-foreground line-clamp-2">{item.description}</span>
                                   )}
                                 </div>
-                                <span className="text-base font-bold text-primary">₹{item.price.toFixed(2)}</span>
+                                <span className={cn(
+                                  "text-base font-bold",
+                                  item.is_available ? "text-primary" : "text-muted-foreground"
+                                )}>
+                                  ₹{item.price.toFixed(2)}
+                                </span>
                               </Button>
                             ))}
                         </div>

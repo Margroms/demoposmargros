@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase, type Order, type OrderItem } from "@/lib/supabase"
+import { supabase, type Order, type OrderItem, type MenuItem, type MenuCategory } from "@/lib/supabase"
 import { Bell, Check, Clock, Printer } from "lucide-react"
 import { useState, useEffect } from "react"
 
@@ -15,6 +16,8 @@ export default function KitchenDashboard() {
   // State
   const [orders, setOrders] = useState<Order[]>([])
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([])
   const [loading, setLoading] = useState(true)
 
   // Fetch data on component mount
@@ -36,15 +39,23 @@ export default function KitchenDashboard() {
       })
       .subscribe()
 
+    const menuItemsSubscription = supabase
+      .channel("kitchen-menu-items")
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => {
+        fetchMenuItems()
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(ordersSubscription)
       supabase.removeChannel(orderItemsSubscription)
+      supabase.removeChannel(menuItemsSubscription)
     }
   }, [])
 
   const fetchData = async () => {
     setLoading(true)
-    await Promise.all([fetchOrders(), fetchOrderItems()])
+    await Promise.all([fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
     setLoading(false)
   }
 
@@ -86,6 +97,73 @@ export default function KitchenDashboard() {
       })
     } else {
       setOrderItems(data || [])
+    }
+  }
+
+  const fetchMenuItems = async () => {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select(`
+        *,
+        menu_categories (*)
+      `)
+      .order("name")
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch menu items",
+        variant: "destructive",
+      })
+    } else {
+      setMenuItems(data || [])
+    }
+  }
+
+  const fetchMenuCategories = async () => {
+    const { data, error } = await supabase
+      .from("menu_categories")
+      .select("*")
+      .order("display_order")
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch menu categories",
+        variant: "destructive",
+      })
+    } else {
+      setMenuCategories(data || [])
+    }
+  }
+
+  const toggleMenuItemAvailability = async (menuItemId: number, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("menu_items")
+        .update({ is_available: !currentStatus })
+        .eq("id", menuItemId)
+
+      if (error) throw error
+
+      // Update local state
+      setMenuItems((prevItems) =>
+        prevItems.map((item) =>
+          item.id === menuItemId ? { ...item, is_available: !currentStatus } : item
+        )
+      )
+
+      toast({
+        title: "Availability Updated",
+        description: `Menu item has been marked as ${!currentStatus ? "available" : "unavailable"}`,
+      })
+    } catch (error) {
+      console.error("Error updating menu item availability:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update menu item availability",
+        variant: "destructive",
+      })
     }
   }
 
@@ -328,6 +406,63 @@ export default function KitchenDashboard() {
             </TabsContent>
           ))}
         </Tabs>
+
+        {/* Menu Items Availability Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Menu Items Availability</CardTitle>
+            <CardDescription>Toggle availability for each dish</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue={menuCategories[0]?.name || "All"} className="w-full">
+              <TabsList className="mb-4 w-full flex-wrap h-auto gap-1 p-1 bg-muted">
+                {menuCategories.map((category) => (
+                  <TabsTrigger 
+                    key={category.id} 
+                    value={category.name}
+                    className="text-sm px-3 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium"
+                  >
+                    {category.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {menuCategories.map((category) => (
+                <TabsContent key={category.id} value={category.name} className="mt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                    {menuItems
+                      .filter((item) => item.category_id === category.id)
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex-1 mr-3">
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={item.is_available ? "default" : "secondary"}>
+                              {item.is_available ? "Available" : "Unavailable"}
+                            </Badge>
+                            <Switch
+                              checked={item.is_available}
+                              onCheckedChange={() => toggleMenuItemAvailability(item.id, item.is_available)}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                  {menuItems.filter((item) => item.category_id === category.id).length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No items in this category</p>
+                    </div>
+                  )}
+                </TabsContent>
+              ))}
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

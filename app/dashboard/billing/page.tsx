@@ -18,7 +18,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { supabase, type TableRow, type OrderItemWithMenuItem, type MenuItem, type Order, type PaymentWithOrder } from "@/lib/supabase"
+import { supabase, type TableRow, type OrderItemWithMenuItem, type MenuItem, type MenuCategory, type Order, type PaymentWithOrder } from "@/lib/supabase"
 import { CreditCard, Download, Printer, Receipt, Wallet, AlertTriangle } from "lucide-react"
 import { useState, useEffect } from "react"
 
@@ -59,6 +59,8 @@ export default function BillingDashboard() {
   const [tableBills, setTableBills] = useState<TableBill[]>([])
   const [orderItems, setOrderItems] = useState<OrderItemWithMenuItem[]>([])
   const [completedPayments, setCompletedPayments] = useState<PaymentWithOrder[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([])
   const [selectedTableBill, setSelectedTableBill] = useState<TableBill | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash")
   const [additionalDiscount, setAdditionalDiscount] = useState<number>(0)
@@ -96,16 +98,25 @@ export default function BillingDashboard() {
       })
       .subscribe()
 
+    const menuItemsSubscription = supabase
+      .channel("billing-menu-items")
+      .on("postgres_changes", { event: "*", schema: "public", table: "menu_items" }, () => {
+        fetchOrderItems()
+        fetchMenuItems()
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(tablesSubscription)
       supabase.removeChannel(paymentsSubscription)
       supabase.removeChannel(ordersSubscription)
+      supabase.removeChannel(menuItemsSubscription)
     }
   }, [])
 
   const fetchData = async () => {
     setLoading(true)
-    await Promise.all([fetchTableBills(), fetchOrderItems(), fetchCompletedPayments()])
+    await Promise.all([fetchTableBills(), fetchOrderItems(), fetchCompletedPayments(), fetchMenuItems(), fetchMenuCategories()])
     setLoading(false)
   }
 
@@ -210,6 +221,43 @@ export default function BillingDashboard() {
       })
     } else {
       setCompletedPayments(data || [])
+    }
+  }
+
+  const fetchMenuItems = async () => {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select(`
+        *,
+        menu_categories (*)
+      `)
+      .order("name")
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch menu items",
+        variant: "destructive",
+      })
+    } else {
+      setMenuItems(data || [])
+    }
+  }
+
+  const fetchMenuCategories = async () => {
+    const { data, error } = await supabase
+      .from("menu_categories")
+      .select("*")
+      .order("display_order")
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch menu categories",
+        variant: "destructive",
+      })
+    } else {
+      setMenuCategories(data || [])
     }
   }
 
@@ -742,7 +790,17 @@ export default function BillingDashboard() {
                                 getOrderItems(order.id).map((item) => (
                                   <tr key={item.id} className="border-b last:border-0">
                                     <td className="p-2 whitespace-nowrap">
-                                      {item.menu_items?.name}
+                                      <div className="flex items-center gap-2">
+                                        <span>{item.menu_items?.name}</span>
+                                        {item.menu_items && (
+                                          <Badge 
+                                            variant={item.menu_items.is_available ? "default" : "secondary"}
+                                            className="text-xs"
+                                          >
+                                            {item.menu_items.is_available ? "Available" : "Unavailable"}
+                                          </Badge>
+                                        )}
+                                      </div>
                                       {item.notes && (
                                         <div className="text-xs text-muted-foreground">{item.notes}</div>
                                       )}
@@ -1030,6 +1088,57 @@ export default function BillingDashboard() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Menu Items Availability Status Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Menu Items Availability Status</CardTitle>
+            <CardDescription>View the current availability status of all menu items</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue={menuCategories[0]?.name || "All"} className="w-full">
+              <TabsList className="mb-4 w-full flex-wrap h-auto gap-1 p-1 bg-muted">
+                {menuCategories.map((category) => (
+                  <TabsTrigger 
+                    key={category.id} 
+                    value={category.name}
+                    className="text-sm px-3 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium"
+                  >
+                    {category.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {menuCategories.map((category) => (
+                <TabsContent key={category.id} value={category.name} className="mt-0">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
+                    {menuItems
+                      .filter((item) => item.category_id === category.id)
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex-1 mr-3">
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</div>
+                          </div>
+                          <Badge variant={item.is_available ? "default" : "secondary"}>
+                            {item.is_available ? "Available" : "Unavailable"}
+                          </Badge>
+                        </div>
+                      ))}
+                  </div>
+                  {menuItems.filter((item) => item.category_id === category.id).length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p>No items in this category</p>
+                    </div>
+                  )}
+                </TabsContent>
+              ))}
+            </Tabs>
+          </CardContent>
+        </Card>
       </div>
       {showAiInsights && (
         <Dialog open={showAiInsights} onOpenChange={setShowAiInsights}>
