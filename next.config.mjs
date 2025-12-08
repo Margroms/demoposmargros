@@ -1,8 +1,12 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // eslint config moved to separate config file or removed (no longer supported in next.config)
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -27,23 +31,15 @@ const nextConfig = {
       };
     }
 
-    // Handle worker files
-    config.module.rules.push({
-      test: /\.worker\.js$/,
-      use: {
-        loader: 'worker-loader',
-        options: {
-          filename: 'static/[hash].worker.js',
-          publicPath: '/_next/',
-        },
-      },
-    });
+    // Removed worker-loader config as it may cause build issues in Next.js 16
+    // If you need workers, use Next.js built-in worker support
 
     return config;
   },
-  experimental: {
-    esmExternals: 'loose',
-  },
+  // Fix lockfile warning
+  outputFileTracingRoot: path.join(__dirname),
+  // Removed experimental.esmExternals as it's not supported by Turbopack
+  // and is not recommended to be modified
 }
 
 export default nextConfig
