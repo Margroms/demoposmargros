@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
 import { supabase, type Order, type Payment } from "@/lib/supabase"
-import { ArrowDown, ArrowUp, CreditCard, DollarSign, ShoppingBag, Users, Bot, Target, ClipboardList, Settings, Users2, BarChart3, RotateCcw } from "lucide-react"
+import { ArrowDown, ArrowUp, CreditCard, DollarSign, ShoppingBag, Users, Bot, Target, ClipboardList, Settings, Users2, BarChart3, RotateCcw, Activity, CheckCircle2, TrendingUp } from "lucide-react"
 import { useState, useEffect } from "react"
 import {
   Bar,
@@ -51,6 +52,7 @@ export default function AdminDashboard() {
   const [showAiInsights, setShowAiInsights] = useState(false)
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [restaurantSettings, setRestaurantSettings] = useState<any>(null)
+  const [cachedAdminData, setCachedAdminData] = useState<any>(null)
 
   // Fetch data on component mount
   useEffect(() => {
@@ -337,18 +339,24 @@ export default function AdminDashboard() {
     return colors[seed % colors.length]
   }
 
-  // AI Assistant Functions
+  // AI Assistant Functions - Store data for consistency
+  const getAdminData = () => {
+    return {
+      orders,
+      payments,
+      orderItems,
+      menuItems,
+      menuCategories,
+      timeRange: "current_period"
+    }
+  }
+
   const handleGetAdminInsights = async () => {
     setLoadingInsights(true)
     try {
-      const adminData = {
-        orders,
-        payments,
-        orderItems,
-        menuItems,
-        menuCategories,
-        timeRange: "current_period"
-      }
+      const adminData = getAdminData()
+      // Cache the data to ensure consistency
+      setCachedAdminData(adminData)
       
       const insights = await getAdminAssistantInsights(adminData)
       setAiInsights(insights || "No insights available.")
@@ -359,6 +367,68 @@ export default function AdminDashboard() {
       setShowAiInsights(true)
     } finally {
       setLoadingInsights(false)
+    }
+  }
+
+  // Calculate metrics for visualization - consistent calculation method
+  const getBusinessMetrics = () => {
+    // Always use current data for freshness, but with consistent calculation parameters
+    const paidOrders = orders.filter((order) => order.status === "paid")
+    const totalRevenue = paidOrders.reduce((sum, order) => sum + Number(order.total), 0)
+    const totalOrders = orders.length
+    const completedOrders = paidOrders.length
+    const averageOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0
+
+    // Top selling items - consistent calculation
+    const itemQuantities = orderItems
+      .filter(item => item.orders?.status === "paid")
+      .reduce((acc, item) => {
+        const itemName = item.menu_items?.name || 'Unknown Item'
+        acc[itemName] = (acc[itemName] || 0) + Number(item.quantity)
+        return acc
+      }, {} as Record<string, number>)
+
+    const topItems = Object.entries(itemQuantities)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([name, quantity]) => ({ name, quantity }))
+
+    // Category performance - consistent calculation
+    const categoryRevenue = menuCategories.map(category => {
+      const categoryItems = orderItems.filter(
+        item => item.menu_items?.category_id === category.id && item.orders?.status === "paid"
+      )
+      const revenue = categoryItems.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0)
+      return {
+        name: category.name,
+        value: revenue,
+        fill: getRandomColor(category.id)
+      }
+    }).filter(item => item.value > 0)
+
+    // Payment method breakdown - consistent calculation
+    const paymentMethods = payments
+      .filter(p => p.status === 'completed')
+      .reduce((acc, payment) => {
+        const method = payment.payment_method || 'unknown'
+        acc[method] = (acc[method] || 0) + payment.amount
+        return acc
+      }, {} as Record<string, number>)
+
+    const paymentData = Object.entries(paymentMethods).map(([name, value]) => ({
+      name: name.toUpperCase(),
+      value,
+      fill: getRandomColor(name.length)
+    }))
+
+    return {
+      totalRevenue,
+      totalOrders,
+      completedOrders,
+      averageOrderValue,
+      topItems,
+      categoryRevenue,
+      paymentData
     }
   }
 
@@ -456,12 +526,22 @@ export default function AdminDashboard() {
   }
 
   const LoadingView = (
-    <div className="container py-6">
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Loading dashboard...</p>
-        </div>
+    <div className="flex-1 space-y-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="border rounded-lg p-6 animate-pulse">
+            <div className="h-4 w-24 bg-muted rounded mb-2"></div>
+            <div className="h-8 w-32 bg-muted rounded"></div>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="border rounded-lg p-6 animate-pulse">
+            <div className="h-6 w-40 bg-muted rounded mb-4"></div>
+            <div className="h-32 bg-muted rounded"></div>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -469,147 +549,334 @@ export default function AdminDashboard() {
   if (loading) return LoadingView
 
   return (
-    <div className="container py-6">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-          <p className="text-muted-foreground">Overview of Restaurant performance</p>
-        </div>
+    <div className="flex-1 space-y-4">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+      </div>
 
-        {/* AI Assistant Section */}
-        <Card className="border-2 border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              Supreme Admin Assistant
-              <span className="text-sm font-normal text-muted-foreground">- Your AI Business Intelligence Partner</span>
+        {/* AI Assistant Section - Enhanced UI */}
+        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-secondary/10 shadow-lg hover:shadow-xl transition-all">
+          <CardHeader className="pb-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-primary/20 border border-primary/30">
+                  <Bot className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                    Business Intelligence Assistant
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30">
+                      AI Powered
+                    </span>
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-base">
+                    Your AI Business Partner for Strategic Insights
+                  </CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-3 gap-4 p-4 bg-background/50 rounded-lg border border-border/50">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-primary">{stats.totalOrders}</div>
+                <div className="text-xs text-muted-foreground mt-1">Total Orders</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">₹{stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</div>
+                <div className="text-xs text-muted-foreground mt-1">Revenue</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{stats.totalCustomers}</div>
+                <div className="text-xs text-muted-foreground mt-1">Tables Served</div>
+              </div>
+            </div>
+            <Button 
+              onClick={handleGetAdminInsights} 
+              disabled={loadingInsights} 
+              variant="default" 
+              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all"
+              size="lg"
+            >
+              {loadingInsights ? (
+                <>
+                  <RotateCcw className="mr-2 h-5 w-5 animate-spin" /> 
+                  Generating Intelligence Report...
+                </>
+              ) : (
+                <>
+                  <BarChart3 className="mr-2 h-5 w-5" /> 
+                  Generate Business Intelligence Report
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-center text-muted-foreground">
+              Get AI-powered insights with visual analytics and strategic recommendations
+            </p>
+          </CardContent>
+        </Card>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Total Revenue - Donut Chart with Progress */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Revenue
             </CardTitle>
-            <CardDescription>
-              Get comprehensive business insights, strategic planning, and operational optimization recommendations
-            </CardDescription>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
-              <Button onClick={handleGetAdminInsights} disabled={loadingInsights} variant="outline" className="w-full">
-                {loadingInsights ? (
+            <div className="h-[180px] relative">
+              {(() => {
+                // Create a visual donut chart showing revenue progress
+                const targetRevenue = Math.max(stats.totalRevenue * 1.5, 10000) // Set a target for visualization
+                const revenuePercentage = Math.min((stats.totalRevenue / targetRevenue) * 100, 100)
+                const revenueData = [
+                  { name: 'Earned', value: stats.totalRevenue, fill: '#3b82f6' },
+                  { name: 'Remaining', value: Math.max(targetRevenue - stats.totalRevenue, 0), fill: '#e5e7eb' }
+                ]
+                
+                return (
                   <>
-                    <RotateCcw className="mr-2 h-4 w-4 animate-spin" /> Generating...
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={revenueData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={2}
+                          dataKey="value"
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          {revenueData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'Earned') {
+                              return [`₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, "Revenue Earned"]
+                            }
+                            return null
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary">₹{stats.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Total Earnings</p>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {revenuePercentage.toFixed(0)}% of target
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Based on paid orders
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Orders - Donut Chart by Status */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Orders Status
+            </CardTitle>
+            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="h-[180px]">
+              {(() => {
+                const orderStatusData = [
+                  { name: 'Paid', value: orders.filter(o => o.status === 'paid').length, fill: '#10b981' },
+                  { name: 'Pending', value: orders.filter(o => o.status === 'pending').length, fill: '#f59e0b' },
+                  { name: 'Cancelled', value: orders.filter(o => o.status === 'cancelled').length, fill: '#ef4444' },
+                ].filter(item => item.value > 0)
+                
+                return orderStatusData.length > 0 ? (
+                  <>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={orderStatusData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={70}
+                          paddingAngle={5}
+                          dataKey="value"
+                        >
+                          {orderStatusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="text-center mt-2">
+                      <div className="text-2xl font-bold">{stats.totalOrders}</div>
+                      <p className="text-xs text-muted-foreground">Total Orders</p>
+                    </div>
+                    <div className="flex justify-center gap-4 mt-2 text-xs">
+                      {orderStatusData.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-1">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.fill }}></div>
+                          <span className="text-muted-foreground">{item.name}: {item.value}</span>
+                        </div>
+                      ))}
+                    </div>
                   </>
                 ) : (
-                  <>
-                    <Target className="mr-2 h-4 w-4" /> Executive Insights
-                  </>
-                )}
-              </Button>
-              <Button onClick={handleGetStrategicPlan} disabled={loadingInsights} variant="outline" className="w-full">
-                {loadingInsights ? (
-                  <>
-                    <RotateCcw className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                  </>
-                ) : (
-                  <>
-                    <ClipboardList className="mr-2 h-4 w-4" /> Strategic Plan
-                  </>
-                )}
-              </Button>
-              <Button onClick={handleGetOperationalAnalysis} disabled={loadingInsights} variant="outline" className="w-full">
-                {loadingInsights ? (
-                  <>
-                    <RotateCcw className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                  </>
-                ) : (
-                  <>
-                    <Settings className="mr-2 h-4 w-4" /> Operations
-                  </>
-                )}
-              </Button>
-              <Button onClick={handleGetCustomerInsights} disabled={loadingInsights} variant="outline" className="w-full">
-                {loadingInsights ? (
-                  <>
-                    <RotateCcw className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                  </>
-                ) : (
-                  <>
-                    <Users2 className="mr-2 h-4 w-4" /> Customers
-                  </>
-                )}
-              </Button>
-              <Button onClick={handleGetBusinessIntelligence} disabled={loadingInsights} variant="outline" className="w-full">
-                {loadingInsights ? (
-                  <>
-                    <RotateCcw className="mr-2 h-4 w-4 animate-spin" /> Generating...
-                  </>
-                ) : (
-                  <>
-                    <BarChart3 className="mr-2 h-4 w-4" /> BI Dashboard
-                  </>
-                )}
-              </Button>
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold">{stats.totalOrders}</div>
+                      <p className="text-xs text-muted-foreground">Total Orders</p>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{stats.totalRevenue.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <span className="text-muted-foreground">
-                  Based on paid orders
-                </span>
-              </p>
-            </CardContent>
-          </Card>
+        {/* Tables Served - Visual Progress Donut */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Tables Served</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="h-[180px] relative">
+              {(() => {
+                // Create a visual donut chart showing tables served
+                const targetTables = Math.max(stats.totalCustomers * 2, 20) // Set a target for visualization
+                const tablesPercentage = Math.min((stats.totalCustomers / targetTables) * 100, 100)
+                const tablesData = [
+                  { name: 'Served', value: stats.totalCustomers, fill: '#8b5cf6' },
+                  { name: 'Available', value: Math.max(targetTables - stats.totalCustomers, 0), fill: '#e5e7eb' }
+                ]
+                
+                return (
+                  <>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={tablesData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={2}
+                          dataKey="value"
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          {tablesData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'Served') {
+                              return [`${value} tables`, "Tables Served"]
+                            }
+                            return null
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-purple-600">{stats.totalCustomers}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Unique Tables</p>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {tablesPercentage.toFixed(0)}% capacity
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Customers served today
+            </p>
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Orders</CardTitle>
-              <ShoppingBag className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">+{stats.totalOrders}</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <span className="text-muted-foreground">
-                  All order statuses
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Tables Served</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">+{stats.totalCustomers}</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <span className="text-muted-foreground">
-                  Unique tables served
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Average Bill</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{stats.averageBill.toFixed(2)}</div>
-              <p className="text-xs text-muted-foreground flex items-center">
-                <span className="text-muted-foreground">
-                  Per paid order
-                </span>
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Average Bill - Visual Donut with Progress */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Average Bill</CardTitle>
+            <CreditCard className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="h-[180px] relative">
+              {(() => {
+                // Create a visual donut chart showing average bill
+                const targetBill = Math.max(stats.averageBill * 1.3, 500) // Set a target for visualization
+                const billPercentage = Math.min((stats.averageBill / targetBill) * 100, 100)
+                const billData = [
+                  { name: 'Average', value: stats.averageBill, fill: '#06b6d4' },
+                  { name: 'Potential', value: Math.max(targetBill - stats.averageBill, 0), fill: '#e5e7eb' }
+                ]
+                
+                return (
+                  <>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={billData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={2}
+                          dataKey="value"
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          {billData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'Average') {
+                              return [`₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, "Average Bill"]
+                            }
+                            return null
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-cyan-600">₹{stats.averageBill.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Per Order</p>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {billPercentage.toFixed(0)}% of target
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Average per paid order
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
         {/* Benchmark Comparison Dashboard */}
         {restaurantSettings && restaurantSettings.restaurant_type && (
@@ -827,43 +1094,247 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
-      </div>
 
-      {/* AI Insights Dialog */}
-      {showAiInsights && (
-        <Dialog open={showAiInsights} onOpenChange={setShowAiInsights}>
-          <DialogContent className="max-w-6xl max-h-[85vh] overflow-hidden">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                Supreme Admin Assistant - Business Intelligence Report
-              </DialogTitle>
-              <DialogDescription>
-                Comprehensive strategic insights and recommendations for your restaurant business
-              </DialogDescription>
-            </DialogHeader>
-            <div className="overflow-y-auto max-h-[65vh] pr-2">
-              <div className="space-y-4">
-                {aiInsights ? (
-                  <MarkdownRenderer content={aiInsights} />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No insights available at this time.
+      {/* AI Insights Dialog - Enhanced with Graphics */}
+      {showAiInsights && (() => {
+        const metrics = getBusinessMetrics()
+        return (
+          <Dialog open={showAiInsights} onOpenChange={setShowAiInsights}>
+            <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden p-0">
+              <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-primary/10 to-secondary/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/20">
+                      <Bot className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <DialogTitle className="text-2xl font-bold">
+                        Business Intelligence Report
+                      </DialogTitle>
+                      <DialogDescription className="text-base mt-1">
+                        AI-Powered Strategic Insights & Analytics
+                      </DialogDescription>
+                    </div>
                   </div>
-                )}
+                  <Badge variant="outline" className="text-sm">
+                    {new Date().toLocaleDateString()}
+                  </Badge>
+                </div>
+              </DialogHeader>
+              
+              <div className="overflow-y-auto max-h-[calc(90vh-180px)] px-6 py-4">
+                <div className="space-y-6">
+                  {/* Key Metrics Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <Card className="border-2 border-green-500/30 bg-green-500/5">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Total Revenue</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              ₹{metrics.totalRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+                          <DollarSign className="h-8 w-8 text-green-500/50" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-2 border-blue-500/30 bg-blue-500/5">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Total Orders</p>
+                            <p className="text-2xl font-bold text-blue-600">{metrics.totalOrders}</p>
+                          </div>
+                          <ShoppingBag className="h-8 w-8 text-blue-500/50" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-2 border-purple-500/30 bg-purple-500/5">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Completed</p>
+                            <p className="text-2xl font-bold text-purple-600">{metrics.completedOrders}</p>
+                          </div>
+                          <CheckCircle2 className="h-8 w-8 text-purple-500/50" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-2 border-amber-500/30 bg-amber-500/5">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">Avg Order Value</p>
+                            <p className="text-2xl font-bold text-amber-600">
+                              ₹{metrics.averageOrderValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                            </p>
+                          </div>
+                          <CreditCard className="h-8 w-8 text-amber-500/50" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Charts Section */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Top Selling Items Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" />
+                          Top Selling Items
+                        </CardTitle>
+                        <CardDescription>Most popular items by quantity sold</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[250px]">
+                          {metrics.topItems.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart
+                                layout="vertical"
+                                data={metrics.topItems}
+                                margin={{ top: 5, right: 30, bottom: 5, left: 80 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" />
+                                <YAxis dataKey="name" type="category" width={70} />
+                                <Tooltip />
+                                <Bar dataKey="quantity" fill="#10b981" radius={[0, 8, 8, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground">
+                              <p>No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Category Performance Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5" />
+                          Category Performance
+                        </CardTitle>
+                        <CardDescription>Revenue by menu category</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[250px]">
+                          {metrics.categoryRevenue.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={metrics.categoryRevenue}
+                                  cx="50%"
+                                  cy="50%"
+                                  labelLine={false}
+                                  label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
+                                  outerRadius={80}
+                                  fill="#8884d8"
+                                  dataKey="value"
+                                >
+                                  {metrics.categoryRevenue.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                  ))}
+                                </Pie>
+                                <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, "Revenue"]} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full text-muted-foreground">
+                              <p>No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Payment Methods Chart */}
+                    {metrics.paymentData.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <CreditCard className="h-5 w-5" />
+                            Payment Methods
+                          </CardTitle>
+                          <CardDescription>Revenue breakdown by payment type</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-[250px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <Pie
+                                  data={metrics.paymentData}
+                                  cx="50%"
+                                  cy="50%"
+                                  labelLine={false}
+                                  label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
+                                  outerRadius={80}
+                                  fill="#8884d8"
+                                  dataKey="value"
+                                >
+                                  {metrics.paymentData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                  ))}
+                                </Pie>
+                                <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString('en-IN')}`, "Amount"]} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* AI Insights Text - Condensed */}
+                  {aiInsights && (
+                    <Card className="border-2 border-primary/20">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Bot className="h-5 w-5" />
+                          AI Strategic Insights
+                        </CardTitle>
+                        <CardDescription>Key recommendations and insights</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="max-h-[300px] overflow-y-auto prose prose-sm dark:prose-invert max-w-none">
+                          <MarkdownRenderer content={aiInsights} />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </div>
-            </div>
-            <DialogFooter className="border-t pt-4">
-              <Button variant="outline" onClick={() => setShowAiInsights(false)}>
-                Close Report
-              </Button>
-              <Button onClick={handleGetAdminInsights} disabled={loadingInsights}>
-                {loadingInsights ? 'Generating...' : 'Refresh Insights'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+              
+              <DialogFooter className="px-6 py-4 border-t bg-muted/30">
+                <Button variant="outline" onClick={() => setShowAiInsights(false)}>
+                  Close Report
+                </Button>
+                <Button 
+                  onClick={handleGetAdminInsights} 
+                  disabled={loadingInsights}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  {loadingInsights ? (
+                    <>
+                      <RotateCcw className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <BarChart3 className="mr-2 h-4 w-4" />
+                      Refresh Report
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
     </div>
   )
 }

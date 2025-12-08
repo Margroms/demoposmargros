@@ -875,6 +875,16 @@ export default function MenuPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <h2 className="text-xl sm:text-2xl font-bold text-primary">Menu Items</h2>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
+              {/* Primary Add Item Button - Most Prominent */}
+              <button
+                onClick={() => openItemModal()}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 px-4 sm:px-6 py-2.5 rounded-lg flex items-center justify-center space-x-2 shadow-lg font-medium text-sm sm:text-base order-first"
+              >
+                <Plus className="w-5 h-5 sm:w-5 sm:h-5" />
+                <span>Add Menu Item</span>
+              </button>
+              
+              {/* Secondary Actions */}
               <button
                 onClick={() => setCsvUploadOpen(true)}
                 className="bg-secondary text-secondary-foreground hover:bg-secondary/90 px-3 sm:px-4 py-2 rounded-lg flex items-center justify-center space-x-2 shadow-md text-sm sm:text-base"
@@ -888,13 +898,6 @@ export default function MenuPage() {
               >
                 <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Scan Menu</span>
-              </button>
-              <button
-                onClick={() => openItemModal()}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 px-3 sm:px-4 py-2 rounded-lg flex items-center justify-center space-x-2 shadow-md text-sm sm:text-base"
-              >
-                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Add Item</span>
               </button>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <button

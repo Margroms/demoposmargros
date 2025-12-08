@@ -96,7 +96,10 @@ export default function WaiterDashboard() {
   }, [])
 
   const fetchData = async () => {
-    setLoading(true)
+    // Only show loading on initial load
+    if (tables.length === 0 && orders.length === 0) {
+      setLoading(true)
+    }
     await Promise.all([seedTablesIfNeeded(), fetchTables(), fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
     setLoading(false)
   }
@@ -617,24 +620,32 @@ export default function WaiterDashboard() {
     }
   }
 
+  // Show skeleton loaders instead of blocking spinner
   if (loading) {
     return (
-      <div className="container py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading tables...</p>
-          </div>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between space-y-2">
+          <h2 className="text-3xl font-bold tracking-tight">Table Layout</h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="border-2 rounded-lg p-4 min-h-[120px] animate-pulse">
+              <div className="flex flex-col items-center justify-center space-y-3 h-full">
+                <div className="h-10 w-10 rounded-full bg-muted"></div>
+                <div className="h-4 w-16 bg-muted rounded"></div>
+                <div className="h-4 w-20 bg-muted rounded"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-3 sm:p-6 space-y-4 sm:space-y-6">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl sm:text-3xl font-bold">Table Layout</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Select a table to manage orders</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Table Layout</h2>
       </div>
 
       <Tabs defaultValue="AC" className="w-full">
@@ -708,9 +719,9 @@ export default function WaiterDashboard() {
       </Tabs>
 
         {selectedTable && (
-          <div className="mt-6 space-y-6">
+          <div className="mt-4 space-y-4">
             {/* Mobile-first layout: Stack vertically on mobile, side-by-side on larger screens */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Orders Section */}
               <Card className="order-2 lg:order-1">
                 <CardHeader className="pb-4 px-4 sm:px-6">

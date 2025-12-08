@@ -665,27 +665,33 @@ export default function BillingDashboard() {
     }
   };
 
+  // Show skeleton loaders instead of blocking spinner
   if (loading) {
     return (
-      <div className="container py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading billing data...</p>
-          </div>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold">Billing Dashboard</h1>
+          <p className="text-muted-foreground">Process table payments and manage bills</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-6 animate-pulse">
+              <div className="h-6 w-32 bg-muted rounded mb-4"></div>
+              <div className="h-4 w-24 bg-muted rounded mb-2"></div>
+              <div className="h-8 w-20 bg-muted rounded"></div>
+            </div>
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container py-6">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold">Billing Dashboard</h1>
-          <p className="text-muted-foreground">Process table payments and manage bills</p>
-        </div>
-        <Button onClick={handleGetAiInsights} disabled={loadingInsights} className="mb-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Billing Dashboard</h2>
+      </div>
+      <Button onClick={handleGetAiInsights} disabled={loadingInsights} className="mb-4">
           {loadingInsights ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -696,7 +702,7 @@ export default function BillingDashboard() {
           )}
         </Button>
 
-        <Tabs defaultValue="pending" className="w-full">
+      <Tabs defaultValue="pending" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="pending">Pending Payments</TabsTrigger>
             <TabsTrigger value="history">Payment History</TabsTrigger>
@@ -1139,7 +1145,6 @@ export default function BillingDashboard() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
       {showAiInsights && (
         <Dialog open={showAiInsights} onOpenChange={setShowAiInsights}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
@@ -1167,6 +1172,6 @@ export default function BillingDashboard() {
           </DialogContent>
         </Dialog>
       )}
-    </div>
+      </div>
   )
 }

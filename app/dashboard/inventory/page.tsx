@@ -609,28 +609,34 @@ export default function InventoryDashboard() {
   // Calculate inventory value
   const inventoryValue = inventory.reduce((total, item) => total + Number(item.quantity) * Number(item.price), 0)
 
+  // Show skeleton loaders instead of blocking spinner
   if (loading) {
     return (
-      <div className="container py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading inventory...</p>
-          </div>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold">Inventory Dashboard</h1>
+          <p className="text-muted-foreground">Manage inventory items and stock levels</p>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-6 animate-pulse">
+              <div className="h-5 w-32 bg-muted rounded mb-3"></div>
+              <div className="h-4 w-24 bg-muted rounded mb-2"></div>
+              <div className="h-6 w-20 bg-muted rounded"></div>
+            </div>
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-2xl md:text-3xl font-bold">Inventory Dashboard</h1>
-          <p className="text-muted-foreground">Manage stock levels and inventory items</p>
-        </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight">Inventory Dashboard</h2>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Items</CardTitle>
@@ -1117,7 +1123,6 @@ export default function InventoryDashboard() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
       {showDeleteModal && (
         <Dialog open={showDeleteModal} onOpenChange={closeDeleteModal}>
           <DialogContent>
@@ -1158,7 +1163,7 @@ export default function InventoryDashboard() {
           </DialogContent>
         </Dialog>
       )}
-    </div>
+      </div>
   )
 }
 
@@ -1296,8 +1301,19 @@ const InventoryList = ({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-b hover:bg-gray-50">
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center gap-2">
+                    <Package className="h-12 w-12 opacity-50" />
+                    <p className="text-lg font-medium">No inventory items found</p>
+                    <p className="text-sm">Add items using the "Add Item" button above</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              items.map((item) => (
+                <tr key={item.id} className="border-b hover:bg-gray-50">
                 <td className="p-3">
                   <input
                     type="checkbox"
@@ -1347,15 +1363,25 @@ const InventoryList = ({
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
       {/* Mobile Card View */}
       <div className="grid grid-cols-1 gap-3 md:hidden">
-        {items.map((item) => (
-          <div key={item.id} className="border rounded-lg p-3 bg-white shadow-sm">
+        {items.length === 0 ? (
+          <div className="border rounded-lg p-8 text-center text-muted-foreground">
+            <div className="flex flex-col items-center gap-2">
+              <Package className="h-12 w-12 opacity-50" />
+              <p className="text-lg font-medium">No inventory items found</p>
+              <p className="text-sm">Add items using the "Add Item" button above</p>
+            </div>
+          </div>
+        ) : (
+          items.map((item) => (
+            <div key={item.id} className="border rounded-lg p-3 bg-white shadow-sm">
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center space-x-2 flex-1">
                 <input
@@ -1407,7 +1433,8 @@ const InventoryList = ({
               </div>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   )

@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { Header } from "@/components/dashboard/header"
+import { Sidebar } from "@/components/dashboard/sidebar"
 import { RestaurantOnboarding } from "@/components/restaurant-onboarding"
 import { isRestaurantConfigured } from "@/lib/restaurant-settings"
 import { useState, useEffect } from "react"
@@ -42,7 +43,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <DashboardLayout>{children}</DashboardLayout>
+      <div className="h-full relative">
+        <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-zinc-900 text-white">
+          <Sidebar className="text-white" />
+        </div>
+        <main className="md:pl-72">
+          <Header />
+          <div className="p-8">
+            {children}
+          </div>
+        </main>
+      </div>
       {showOnboarding && (
         <RestaurantOnboarding onComplete={() => setShowOnboarding(false)} />
       )}

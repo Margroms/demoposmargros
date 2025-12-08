@@ -2,16 +2,18 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Switch } from "@/components/ui/switch"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { useToast } from "@/components/ui/use-toast"
 import { supabase, type Order, type OrderItem, type MenuItem, type MenuCategory } from "@/lib/supabase"
-import { Bell, Check, Clock, Printer } from "lucide-react"
+import { Clock, CheckCircle2, ChefHat, Utensils } from "lucide-react"
 import { useState, useEffect } from "react"
+import { toast } from "sonner"
+import { AnimatePresence, motion } from "motion/react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 
 export default function KitchenDashboard() {
-  const { toast } = useToast()
+  const { toast: toastHook } = useToast()
 
   // State
   const [orders, setOrders] = useState<Order[]>([])
@@ -19,6 +21,82 @@ export default function KitchenDashboard() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [menuCategories, setMenuCategories] = useState<MenuCategory[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentTime, setCurrentTime] = useState<Date>(new Date())
+
+  const fetchData = async () => {
+    // Don't show loading on subsequent fetches - just update data smoothly
+    if (orders.length === 0 && orderItems.length === 0) {
+      setLoading(true)
+    }
+    await Promise.all([fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
+    setLoading(false)
+  }
+
+  const fetchMenuItems = async () => {
+    const { data, error } = await supabase
+      .from("menu_items")
+      .select("*")
+      .order("name")
+
+    if (error) {
+      console.error("Error fetching menu items:", error)
+    } else {
+      setMenuItems(data || [])
+    }
+  }
+
+  const fetchMenuCategories = async () => {
+    const { data, error } = await supabase
+      .from("menu_categories")
+      .select("*")
+      .order("display_order")
+
+    if (error) {
+      console.error("Error fetching menu categories:", error)
+    } else {
+      setMenuCategories(data || [])
+    }
+  }
+
+  const fetchOrders = async () => {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(`
+        *,
+        tables (*)
+      `)
+      .in("status", ["pending", "preparing", "ready"])
+      .order("created_at", { ascending: true })
+
+    if (error) {
+      toastHook({
+        title: "Error",
+        description: "Failed to fetch orders",
+        variant: "destructive",
+      })
+    } else {
+      setOrders(data || [])
+    }
+  }
+
+  const fetchOrderItems = async () => {
+    const { data, error } = await supabase
+      .from("order_items")
+      .select(`
+        *,
+        menu_items (*)
+      `)
+
+    if (error) {
+      toastHook({
+        title: "Error",
+        description: "Failed to fetch order items",
+        variant: "destructive",
+      })
+    } else {
+      setOrderItems(data || [])
+    }
+  }
 
   // Fetch data on component mount
   useEffect(() => {
@@ -46,124 +124,50 @@ export default function KitchenDashboard() {
       })
       .subscribe()
 
+    // Update time every second
+    const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000)
+
     return () => {
       supabase.removeChannel(ordersSubscription)
       supabase.removeChannel(orderItemsSubscription)
       supabase.removeChannel(menuItemsSubscription)
+      clearInterval(timeInterval)
     }
   }, [])
 
-  const fetchData = async () => {
-    setLoading(true)
-    await Promise.all([fetchOrders(), fetchOrderItems(), fetchMenuItems(), fetchMenuCategories()])
-    setLoading(false)
-  }
-
-  const fetchOrders = async () => {
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        tables (*)
-      `)
-      .in("status", ["pending", "preparing", "ready"])
-      .order("created_at", { ascending: true })
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch orders",
-        variant: "destructive",
-      })
-    } else {
-      setOrders(data || [])
-    }
-  }
-
-  const fetchOrderItems = async () => {
-    const { data, error } = await supabase
-      .from("order_items")
-      .select(`
-        *,
-        menu_items (*)
-      `)
-      .in("status", ["pending", "preparing", "ready"])
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch order items",
-        variant: "destructive",
-      })
-    } else {
-      setOrderItems(data || [])
-    }
-  }
-
-  const fetchMenuItems = async () => {
-    const { data, error } = await supabase
-      .from("menu_items")
-      .select(`
-        *,
-        menu_categories (*)
-      `)
-      .order("name")
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch menu items",
-        variant: "destructive",
-      })
-    } else {
-      setMenuItems(data || [])
-    }
-  }
-
-  const fetchMenuCategories = async () => {
-    const { data, error } = await supabase
-      .from("menu_categories")
-      .select("*")
-      .order("display_order")
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch menu categories",
-        variant: "destructive",
-      })
-    } else {
-      setMenuCategories(data || [])
-    }
-  }
-
-  const toggleMenuItemAvailability = async (menuItemId: number, currentStatus: boolean) => {
+  // Update order status
+  const updateOrderStatus = async (orderId: number, status: "pending" | "preparing" | "ready" | "served") => {
     try {
-      const { error } = await supabase
-        .from("menu_items")
-        .update({ is_available: !currentStatus })
-        .eq("id", menuItemId)
-
-      if (error) throw error
-
-      // Update local state
-      setMenuItems((prevItems) =>
-        prevItems.map((item) =>
-          item.id === menuItemId ? { ...item, is_available: !currentStatus } : item
+      // Optimistically update the UI first for smooth animation
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === orderId ? { ...order, status } : order
         )
       )
 
-      toast({
-        title: "Availability Updated",
-        description: `Menu item has been marked as ${!currentStatus ? "available" : "unavailable"}`,
-      })
+      const { error: orderError } = await supabase.from("orders").update({ status }).eq("id", orderId)
+
+      if (orderError) {
+        // Revert on error
+        fetchData()
+        throw orderError
+      }
+
+      // Update all items in the order to match the order status
+      const { error: itemsError } = await supabase.from("order_items").update({ status }).eq("order_id", orderId)
+
+      if (itemsError) {
+        // Revert on error
+        fetchData()
+        throw itemsError
+      }
+
+      toast.success(`Order #${orderId} marked as ${status}`)
+      // Only fetch if there's a mismatch (shouldn't happen, but safety)
+      setTimeout(() => fetchData(), 500)
     } catch (error) {
-      console.error("Error updating menu item availability:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update menu item availability",
-        variant: "destructive",
-      })
+      console.error("Error updating order status:", error)
+      toast.error("Failed to update order status")
     }
   }
 
@@ -172,298 +176,353 @@ export default function KitchenDashboard() {
     return orderItems.filter((item) => item.order_id === orderId)
   }
 
-  // Update item status
-  const updateItemStatus = async (orderId: number, itemId: number, status: "pending" | "preparing" | "ready") => {
+  // Get elapsed time in minutes
+  const getElapsedTime = (startTime: string) => {
+    const start = new Date(startTime)
+    const diff = Math.floor((currentTime.getTime() - start.getTime()) / 1000 / 60)
+    return `${diff}m`
+  }
+
+  // Toggle menu item availability
+  const toggleMenuItemAvailability = async (itemId: number, currentStatus: boolean) => {
     try {
-      const { error } = await supabase.from("order_items").update({ status }).eq("id", itemId)
+      const { error } = await supabase
+        .from("menu_items")
+        .update({ is_available: !currentStatus })
+        .eq("id", itemId)
 
       if (error) throw error
 
-      // Check if all items in the order are ready
-      const orderItemsList = getOrderItems(orderId)
-      const updatedItems = orderItemsList.map((item) => (item.id === itemId ? { ...item, status } : item))
+      // Optimistically update UI
+      setMenuItems(prevItems =>
+        prevItems.map(item =>
+          item.id === itemId ? { ...item, is_available: !currentStatus } : item
+        )
+      )
 
-      // Update order status based on item statuses
-      let orderStatus: "pending" | "preparing" | "ready" = "pending"
-      if (updatedItems.every((item) => item.status === "ready")) {
-        orderStatus = "ready"
-      } else if (
-        updatedItems.some((item) => item.status === "preparing") &&
-        !updatedItems.some((item) => item.status === "pending")
-      ) {
-        orderStatus = "preparing"
-      }
-
-      await supabase.from("orders").update({ status: orderStatus }).eq("id", orderId)
-
-      toast({
-        title: "Item Status Updated",
-        description: `Item has been marked as ${status}`,
-      })
-
-      fetchData()
+      toast.success(`${!currentStatus ? "Enabled" : "Disabled"} menu item`)
     } catch (error) {
-      console.error("Error updating item status:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update item status",
-        variant: "destructive",
-      })
+      console.error("Error toggling menu item availability:", error)
+      toast.error("Failed to update menu item availability")
+      fetchMenuItems() // Revert on error
     }
   }
 
-  // Update order status
-  const updateOrderStatus = async (orderId: number, status: "pending" | "preparing" | "ready") => {
-    try {
-      // Update order status
-      const { error: orderError } = await supabase.from("orders").update({ status }).eq("id", orderId)
+  // Filter orders by status
+  const pendingOrders = orders.filter((o) => o.status === "pending")
+  const preparingOrders = orders.filter((o) => o.status === "preparing")
+  const readyOrders = orders.filter((o) => o.status === "ready")
 
-      if (orderError) throw orderError
-
-      // Update all items in the order to match the order status
-      const { error: itemsError } = await supabase.from("order_items").update({ status }).eq("order_id", orderId)
-
-      if (itemsError) throw itemsError
-
-      toast({
-        title: "Order Status Updated",
-        description: `Order #${orderId} has been marked as ${status}`,
-      })
-
-      fetchData()
-    } catch (error) {
-      console.error("Error updating order status:", error)
-      toast({
-        title: "Error",
-        description: "Failed to update order status",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Print order
-
-
-  // Get status badge color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "pending":
-        return "bg-amber-500"
-      case "preparing":
-        return "bg-blue-500"
-      case "ready":
-        return "bg-green-500"
-      default:
-        return "bg-gray-500"
-    }
-  }
-
-  // Format timestamp
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp)
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  }
-
-  // Calculate time elapsed in minutes
-  const getTimeElapsed = (timestamp: string) => {
-    const orderTime = new Date(timestamp).getTime()
-    const currentTime = new Date().getTime()
-    return Math.floor((currentTime - orderTime) / 60000)
-  }
-
+  // Show skeleton loaders instead of blocking spinner
   if (loading) {
     return (
-      <div className="container py-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p>Loading orders...</p>
+      <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+        <div className="flex items-center justify-between">
+          <h2 className="text-3xl font-bold tracking-tight flex items-center">
+            <ChefHat className="mr-3 h-8 w-8" />
+            Kitchen Display
+          </h2>
+          <div className="text-xl font-mono font-bold">
+            {currentTime.toLocaleTimeString()}
           </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden">
+          {[1, 2, 3].map((col) => (
+            <div key={col} className="flex flex-col bg-muted/30 rounded-lg p-4 border">
+              <div className="h-6 bg-muted rounded mb-4 w-32 animate-pulse"></div>
+              <div className="space-y-4 flex-1">
+                {[1, 2].map((i) => (
+                  <div key={i} className="bg-card rounded-lg p-4 border animate-pulse">
+                    <div className="h-6 bg-muted rounded mb-2 w-24"></div>
+                    <div className="h-4 bg-muted rounded mb-4 w-16"></div>
+                    <div className="space-y-2 mb-4">
+                      <div className="h-4 bg-muted rounded w-full"></div>
+                      <div className="h-4 bg-muted rounded w-3/4"></div>
+                    </div>
+                    <div className="h-9 bg-muted rounded"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container py-6">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold">Kitchen Dashboard</h1>
-          <p className="text-muted-foreground">Manage food preparation and order queue</p>
+    <div className="space-y-4 h-[calc(100vh-8rem)] flex flex-col">
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold tracking-tight flex items-center">
+          <ChefHat className="mr-3 h-8 w-8" />
+          Kitchen Display
+        </h2>
+        <div className="text-xl font-mono font-bold">
+          {currentTime.toLocaleTimeString()}
+        </div>
+      </div>
+
+      <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden">
+        <TabsList className="mb-4">
+          <TabsTrigger value="orders" className="flex items-center gap-2">
+            <ChefHat className="h-4 w-4" /> Orders
+          </TabsTrigger>
+          <TabsTrigger value="menu" className="flex items-center gap-2">
+            <Utensils className="h-4 w-4" /> Menu Availability
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="orders" className="flex-1 overflow-hidden mt-0">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden">
+        {/* Pending Column */}
+        <div className="flex flex-col bg-muted/30 rounded-lg p-4 border">
+          <h3 className="font-semibold mb-4 flex items-center text-yellow-600">
+            <Clock className="mr-2 h-5 w-5" /> Pending ({pendingOrders.length})
+          </h3>
+          <div className="space-y-4 overflow-y-auto flex-1">
+            <AnimatePresence mode="popLayout">
+              {pendingOrders.map((order) => {
+                const items = getOrderItems(order.id)
+                return (
+                  <motion.div
+                    key={order.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, x: -100 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
+                  >
+                    <OrderCard
+                      order={order}
+                      items={items}
+                      getElapsedTime={getElapsedTime}
+                      onAction={() => updateOrderStatus(order.id, "preparing")}
+                      actionLabel="Start Preparing"
+                    />
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+            {pendingOrders.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-8 text-muted-foreground text-sm"
+              >
+                No pending orders
+              </motion.div>
+            )}
+          </div>
         </div>
 
-        <Tabs defaultValue="all">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <TabsList className="grid grid-cols-2 sm:grid-cols-4 w-full sm:w-auto">
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="pending">Pending</TabsTrigger>
-              <TabsTrigger value="preparing">Preparing</TabsTrigger>
-              <TabsTrigger value="ready">Ready</TabsTrigger>
-            </TabsList>
-            <Button variant="outline" size="sm" className="gap-2 w-full sm:w-auto">
-              <Bell className="h-4 w-4" />
-              <span>New Order Alert</span>
-            </Button>
-          </div>
-
-          {["all", "pending", "preparing", "ready"].map((tab) => (
-            <TabsContent key={tab} value={tab} className="mt-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {orders
-                  .filter((order) => tab === "all" || order.status === tab)
-                  .map((order) => {
-                    const items = getOrderItems(order.id)
-                    return (
-                      <Card key={order.id} className="overflow-hidden">
-                        <CardHeader className="pb-2">
-                          <div className="flex justify-between items-center">
-                            <CardTitle className="text-lg">Table {order.tables?.number}</CardTitle>
-                            <Badge className={`text-white ${getStatusColor(order.status)}`}>
-                              {order.status === "pending"
-                                ? "Pending"
-                                : order.status === "preparing"
-                                  ? "Preparing"
-                                  : "Ready"}
-                            </Badge>
-                          </div>
-                          <CardDescription className="flex justify-between">
-                            <span>Order #{order.id}</span>
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              {formatTime(order.created_at)} ({getTimeElapsed(order.created_at)} min ago)
-                            </span>
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="pb-2">
-                          <ul className="space-y-2">
-                            {items.map((item) => (
-                              <li key={item.id} className="flex justify-between items-center p-2 rounded-md bg-muted">
-                                <div>
-                                  <div className="font-medium">
-                                    {item.quantity}x {item.menu_items?.name}
-                                  </div>
-                                  {item.notes && (
-                                    <div className="text-xs text-muted-foreground">Note: {item.notes}</div>
-                                  )}
-                                </div>
-                                <div className="flex gap-1">
-                                  <Button
-                                    variant={item.status === "pending" ? "default" : "outline"}
-                                    size="sm"
-                                    className="h-6 px-2 text-xs"
-                                    onClick={() => updateItemStatus(order.id, item.id, "pending")}
-                                  >
-                                    Pending
-                                  </Button>
-                                  <Button
-                                    variant={item.status === "preparing" ? "default" : "outline"}
-                                    size="sm"
-                                    className="h-6 px-2 text-xs"
-                                    onClick={() => updateItemStatus(order.id, item.id, "preparing")}
-                                  >
-                                    Preparing
-                                  </Button>
-                                  <Button
-                                    variant={item.status === "ready" ? "default" : "outline"}
-                                    size="sm"
-                                    className="h-6 px-2 text-xs"
-                                    onClick={() => updateItemStatus(order.id, item.id, "ready")}
-                                  >
-                                    Ready
-                                  </Button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                          {order.notes && (
-                            <div className="mt-3 p-2 bg-amber-100 dark:bg-amber-950 rounded-md text-sm">
-                              <span className="font-medium">Order Notes:</span> {order.notes}
-                            </div>
-                          )}
-                        </CardContent>
-                        <CardFooter className="flex gap-2 pt-2">
-                          
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => updateOrderStatus(order.id, "ready")}
-                            disabled={order.status === "ready"}
-                          >
-                            <Check className="mr-1 h-4 w-4" /> Mark All Ready
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    )
-                  })}
-              </div>
-
-              {orders.filter((order) => tab === "all" || order.status === tab).length === 0 && (
-                <div className="text-center py-10 text-muted-foreground">
-                  <p className="text-lg">No {tab === "all" ? "" : tab} orders at the moment</p>
-                </div>
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
-
-        {/* Menu Items Availability Section */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Menu Items Availability</CardTitle>
-            <CardDescription>Toggle availability for each dish</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue={menuCategories[0]?.name || "All"} className="w-full">
-              <TabsList className="mb-4 w-full flex-wrap h-auto gap-1 p-1 bg-muted">
-                {menuCategories.map((category) => (
-                  <TabsTrigger 
-                    key={category.id} 
-                    value={category.name}
-                    className="text-sm px-3 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium"
+        {/* Preparing Column */}
+        <div className="flex flex-col bg-muted/30 rounded-lg p-4 border">
+          <h3 className="font-semibold mb-4 flex items-center text-blue-600">
+            <ChefHat className="mr-2 h-5 w-5" /> Preparing ({preparingOrders.length})
+          </h3>
+          <div className="space-y-4 overflow-y-auto flex-1">
+            <AnimatePresence mode="popLayout">
+              {preparingOrders.map((order) => {
+                const items = getOrderItems(order.id)
+                return (
+                  <motion.div
+                    key={order.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, x: 0 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
                   >
-                    {category.name}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+                    <OrderCard
+                      order={order}
+                      items={items}
+                      getElapsedTime={getElapsedTime}
+                      onAction={() => updateOrderStatus(order.id, "ready")}
+                      actionLabel="Mark Ready"
+                    />
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+            {preparingOrders.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-8 text-muted-foreground text-sm"
+              >
+                No orders in preparation
+              </motion.div>
+            )}
+          </div>
+        </div>
 
-              {menuCategories.map((category) => (
-                <TabsContent key={category.id} value={category.name} className="mt-0">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto">
-                    {menuItems
-                      .filter((item) => item.category_id === category.id)
-                      .map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex-1 mr-3">
-                            <div className="font-medium">{item.name}</div>
-                            <div className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={item.is_available ? "default" : "secondary"}>
-                              {item.is_available ? "Available" : "Unavailable"}
-                            </Badge>
-                            <Switch
-                              checked={item.is_available}
-                              onCheckedChange={() => toggleMenuItemAvailability(item.id, item.is_available)}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                  {menuItems.filter((item) => item.category_id === category.id).length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <p>No items in this category</p>
-                    </div>
-                  )}
-                </TabsContent>
-              ))}
-            </Tabs>
-          </CardContent>
-        </Card>
+        {/* Ready Column */}
+        <div className="flex flex-col bg-muted/30 rounded-lg p-4 border">
+          <h3 className="font-semibold mb-4 flex items-center text-green-600">
+            <CheckCircle2 className="mr-2 h-5 w-5" /> Ready ({readyOrders.length})
+          </h3>
+          <div className="space-y-4 overflow-y-auto flex-1">
+            <AnimatePresence mode="popLayout">
+              {readyOrders.map((order) => {
+                const items = getOrderItems(order.id)
+                return (
+                  <motion.div
+                    key={order.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, x: 100 }}
+                    transition={{ 
+                      duration: 0.3,
+                      ease: [0.4, 0, 0.2, 1]
+                    }}
+                  >
+                    <OrderCard
+                      order={order}
+                      items={items}
+                      getElapsedTime={getElapsedTime}
+                      onAction={() => updateOrderStatus(order.id, "served")}
+                      actionLabel="Serve"
+                    />
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+            {readyOrders.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-8 text-muted-foreground text-sm"
+              >
+                No ready orders
+              </motion.div>
+            )}
+          </div>
+        </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="menu" className="flex-1 overflow-hidden mt-0">
+          <Card className="h-full flex flex-col">
+            <CardHeader>
+              <CardTitle>Menu Item Availability</CardTitle>
+              <CardDescription>Toggle menu items on/off for ordering</CardDescription>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto">
+              <Tabs defaultValue={menuCategories[0]?.name || "All"} className="w-full">
+                <TabsList className="mb-4 w-full flex-wrap h-auto gap-1 p-1 bg-muted">
+                  {menuCategories.map((category) => (
+                    <TabsTrigger
+                      key={category.id}
+                      value={category.name}
+                      className="text-sm px-3 py-2 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium"
+                    >
+                      {category.name}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {menuCategories.map((category) => (
+                  <TabsContent key={category.id} value={category.name} className="mt-0">
+                    <div className="space-y-2">
+                      {menuItems
+                        .filter((item) => item.category_id === category.id)
+                        .map((item) => (
+                          <div
+                            key={item.id}
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex-1">
+                              <div className="font-medium">{item.name}</div>
+                              <div className="text-sm text-muted-foreground">₹{item.price.toFixed(2)}</div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <Badge variant={item.is_available ? "default" : "secondary"}>
+                                {item.is_available ? "Available" : "Unavailable"}
+                              </Badge>
+                              <Switch
+                                checked={item.is_available}
+                                onCheckedChange={() => toggleMenuItemAvailability(item.id, item.is_available)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      {menuItems.filter((item) => item.category_id === category.id).length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                          No items in this category
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
+  )
+}
+
+function OrderCard({
+  order,
+  items,
+  getElapsedTime,
+  onAction,
+  actionLabel,
+}: {
+  order: Order
+  items: OrderItem[]
+  getElapsedTime: (d: string) => string
+  onAction: () => void
+  actionLabel: string
+}) {
+  const elapsedMinutes = parseInt(getElapsedTime(order.created_at))
+  const isUrgent = elapsedMinutes > 20
+
+  return (
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      transition={{ duration: 0.2 }}
+    >
+      <Card className="border-l-4 border-l-primary shadow-sm hover:shadow-md transition-shadow">
+        <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+          <div className="font-bold text-lg">Table {order.tables?.number || "N/A"}</div>
+          <Badge variant={isUrgent ? "destructive" : "secondary"}>
+            {getElapsedTime(order.created_at)}
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          <div className="text-xs text-muted-foreground mb-2">Order #{order.id}</div>
+          <div className="space-y-1 mb-4">
+            {items.map((item) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex justify-between text-sm"
+              >
+                <span>{item.menu_items?.name || "Unknown Item"}</span>
+                <span className="font-bold">x{item.quantity}</span>
+              </motion.div>
+            ))}
+            {items.length === 0 && (
+              <div className="text-xs text-muted-foreground">No items</div>
+            )}
+          </div>
+          <Button className="w-full" size="sm" onClick={onAction}>
+            {actionLabel}
+          </Button>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
