@@ -38,6 +38,8 @@ const nextConfig = {
   },
   // Fix lockfile warning
   outputFileTracingRoot: path.join(__dirname),
+  // Empty turbopack config to silence warning when using webpack
+  turbopack: {},
   // Removed experimental.esmExternals as it's not supported by Turbopack
   // and is not recommended to be modified
 }

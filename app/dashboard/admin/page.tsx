@@ -1100,7 +1100,7 @@ export default function AdminDashboard() {
         const metrics = getBusinessMetrics()
         return (
           <Dialog open={showAiInsights} onOpenChange={setShowAiInsights}>
-            <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden p-0">
+            <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden p-0 z-[100]">
               <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-primary/10 to-secondary/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
